@@ -1,0 +1,36 @@
+model:
+  type: xgboost
+  params:
+    # Tuned values from hyperparameter optimisation (article: Hyperparameter Tuning section)
+    n_estimators: 1300
+    max_depth: 5
+    learning_rate: 0.05
+    subsample: 0.9
+    colsample_bytree: 0.9
+    objective: reg:squarederror
+    n_jobs: 4
+    random_state: 42
+
+training:
+  val_ratio: 0.2
+  target: count
+  target_transform: log1p
+  metrics:
+    - rmsle   # primary (Kaggle competition)
+    - mae     # average absolute error in bike units
+    - mape    # percentage error (business interpretation)
+    - r2      # explained variance
+
+data:
+  competition: bike-sharing-demand
+  source: kaggle
+  dropped_columns:
+    - atemp       # 0.99 correlation with temp (multicollinearity)
+    - workingday  # redundant given dayofweek
+    - casual      # part of target
+    - registered  # part of target
+  winsorized_columns:
+    - weather     # IQR outliers present
+    - humidity    # IQR outliers present
+    - windspeed   # highest outlier rate (1.91%)
+  winsorize_bounds: [0.01, 0.99]

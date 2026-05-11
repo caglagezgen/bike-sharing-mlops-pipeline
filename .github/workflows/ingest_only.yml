@@ -1,0 +1,9 @@
+name: Ingest Only
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ingest:
+    uses: ./.github/workflows/ingest_preprocess.yml
+    secrets: inherit

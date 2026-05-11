@@ -1,0 +1,91 @@
+name: Continuous Training
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - "data/bronze/train.csv.dvc"
+
+concurrency:
+  group: ct
+  cancel-in-progress: false
+
+jobs:
+  train:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Pull bronze data with DVC
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          printf '%s' "$GCP_SA_KEY" > /tmp/gcp-creds.json
+          dvc remote modify --local gcs-remote credentialpath /tmp/gcp-creds.json
+          dvc pull data/bronze/train.csv.dvc
+          rm -f /tmp/gcp-creds.json
+      - name: Validate bronze data quality
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m src.data.validate --path data/bronze/train.csv --min-rows 100
+      - name: Preprocess new data
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m src.data.preprocess --input data/bronze/train.csv --output data/processed/train_processed.csv
+      - name: Download previous model artifacts
+        continue-on-error: true   # first-ever run has no prior artifact
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: ct.yml
+          workflow_conclusion: success
+          name: model-artifacts
+          path: artifacts
+      - name: Save baseline metrics
+        run: |
+          cp artifacts/metrics.json /tmp/baseline_metrics.json 2>/dev/null \
+            || echo '{"val_rmsle": 9999}' > /tmp/baseline_metrics.json
+      - name: Train model
+        env:
+          MLFLOW_TRACKING_URI: file:${{ github.workspace }}/mlruns
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m src.models.train --data data/processed/train_processed.csv
+      - name: Quality gate (champion vs challenger)
+        run: |
+          python - <<'EOF'
+          import json, sys
+          new  = json.load(open("artifacts/metrics.json"))["val_rmsle"]
+          base = json.load(open("/tmp/baseline_metrics.json"))["val_rmsle"]
+          print(f"Challenger RMSLE: {new:.4f}  |  Champion RMSLE: {base:.4f}")
+          if new > base * 1.05:
+              print("FAIL: challenger regressed >5% vs champion — blocking deployment")
+              sys.exit(1)
+          print("PASS: challenger accepted")
+          EOF
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-artifacts
+          path: |
+            artifacts/model
+            artifacts/metrics.json
+            artifacts/model_meta.json
+            artifacts/dataset_meta.json
+            artifacts/data_profile.json
+            artifacts/shap_importance.json
+            artifacts/shap_importance.png
+
+      - name: Upload preprocessed bronze data
+        uses: actions/upload-artifact@v4
+        with:
+          name: ct-processed-data
+          path: data/processed/train_processed.csv

@@ -1,0 +1,35 @@
+Specification for MLOPs Assessment.
+Each student is required to design a Machine Learning Pipeline using GitHub Actions.
+Model Training & Testing
+Model Deployment
+Continuous Integration
+Continuous Delivery
+Continuous Training
+
+Students are expected to research and experiement with techniques and tools available.  
+Due Date: 22nd May 2026 EOD
+Document Requirements [2-4 Pages]
+Introduction.
+Usecase and approach taken. Please justify why you took this particular approach (use academic papers as your support)
+Must include a description of a Branching Strategy (even if basic)
+Detail workflows for MLOps pipeline stages e.g. CICD and CT/CM  (more marks will be awarded for the latter stages)
+GutHub Repository Link 
+References - which papers you used to justify your approach.
+Artefact
+Must be stored on your personal GitHub account and set to public until 21st of June 2026.
+Create a repository which includes training/testing of a machine learning model.
+Model must be deployed through Flask API or other.
+Develop a Branching strategy appropriate for the use case.
+GitHub Actions Workflows  for each stage of the pipeline (ingestion/preprocessing -> retraining stage -> continuous deployment)
+At least two unit tests or other must be included within the pipeline.
+Application must be deployed as a Docker Container.
+Flask Application must be automatically deployed through either a Google VM/Kind Kubernetes cluster
+ 
+ 
+Video Presentation
+Student must record a live demonstration of the pipeline and camera must be on (will not accept video if camera is not on)
+When showing and discussing your artefact, the presentation should be unscripted. (no powerpoint slides are necessary)
+During your discussion, all program code and scripts must be explained.
+Model training and testing code does not need to be explained.  Just mention what type of model it is, how to use it (inputs/outputs) and if registering the model with MLFLow, the results and hyperparameters set.
+Make sure to give a description of the deployment architecture also if deploying on Kubernetes or other.
+Time of video should be between 10 and 15 minutes ( I am not strict on this time).

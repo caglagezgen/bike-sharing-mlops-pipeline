@@ -1,0 +1,31 @@
+# Ruff configuration for BDA-ML-Pipeline
+# https://docs.astral.sh/ruff/configuration/
+
+# Directories/files to skip entirely
+exclude = [
+    ".venv",
+    ".git",
+    "__pycache__",
+    "notebooks",        # Jupyter notebooks have intentional exploratory style
+    "mlruns",
+    "artifacts",
+    "data",
+    "scripts",          # one-off research scripts, not production code
+]
+
+line-length = 100
+
+[lint]
+# E/W: pycodestyle  F: pyflakes  I: isort  UP: pyupgrade
+select = ["E", "F", "W", "I", "UP"]
+
+# E501: line-too-long — already handled by line-length above
+# E402: module-level import not at top — needed in monitoring/run_drift.py
+# UP007: use X | Y for type hints — requires Python 3.10+, we target 3.11 but
+#        keep old-style for clarity in docstrings
+ignore = ["E501", "E402", "UP007"]
+
+# Allow unused imports in __init__.py re-export files
+[lint.per-file-ignores]
+"**/__init__.py" = ["F401"]
+"tests/**" = ["F811"]   # redefinition of unused name is fine in test files

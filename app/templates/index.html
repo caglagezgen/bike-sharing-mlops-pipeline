@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bike Sharing Demand Predictor</title>
+  <!-- link your own stylesheet here when ready -->
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 2rem 2.5rem;
+      width: 100%;
+      max-width: 560px;
+    }
+    h1 { font-size: 1.5rem; color: #1a202c; margin-bottom: 0.25rem; }
+    .subtitle { color: #718096; font-size: 0.9rem; margin-bottom: 1.75rem; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .field { display: flex; flex-direction: column; gap: 0.35rem; }
+    .field.full { grid-column: 1 / -1; }
+    label { font-size: 0.8rem; font-weight: 600; color: #4a5568; text-transform: uppercase; letter-spacing: 0.04em; }
+    input, select {
+      border: 1px solid #cbd5e0; border-radius: 6px; padding: 0.5rem 0.7rem;
+      font-size: 0.95rem; color: #2d3748; background: #f7fafc; width: 100%;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus { outline: none; border-color: #4c72b0; background: #fff; }
+    .hint { font-size: 0.75rem; color: #a0aec0; }
+    button[type="submit"] {
+      margin-top: 1.5rem; width: 100%; padding: 0.75rem;
+      background: #4c72b0; color: #fff; font-size: 1rem; font-weight: 600;
+      border: none; border-radius: 8px; cursor: pointer; transition: background 0.15s;
+    }
+    button[type="submit"]:hover { background: #3a5a9a; }
+    .result { margin-top: 1.5rem; padding: 1.25rem; border-radius: 8px; text-align: center; }
+    .result.success { background: #ebf8ff; border: 1px solid #bee3f8; }
+    .result.error   { background: #fff5f5; border: 1px solid #fed7d7; color: #c53030; }
+    .result-label { font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+    .result-value { font-size: 2.5rem; font-weight: 700; color: #2b6cb0; }
+    .result-unit  { font-size: 0.9rem; color: #718096; margin-top: 0.2rem; }
+    .bike-icon { display: flex; justify-content: center; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="bike-icon" aria-hidden="true">
+      <!-- bicycle SVG -->
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60" width="120" height="72" fill="none" stroke="#4c72b0" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+        <!-- rear wheel -->
+        <circle cx="22" cy="42" r="15"/>
+        <!-- front wheel -->
+        <circle cx="78" cy="42" r="15"/>
+        <!-- frame: chainstay left -->
+        <line x1="22" y1="42" x2="46" y2="20"/>
+        <!-- frame: seat tube -->
+        <line x1="46" y1="20" x2="50" y2="42"/>
+        <!-- frame: down tube -->
+        <line x1="46" y1="20" x2="66" y2="42"/>
+        <!-- frame: top tube -->
+        <line x1="46" y1="20" x2="66" y2="18"/>
+        <!-- fork -->
+        <line x1="66" y1="18" x2="78" y2="42"/>
+        <!-- handlebar stem -->
+        <line x1="66" y1="18" x2="68" y2="11"/>
+        <!-- handlebar bar -->
+        <line x1="63" y1="11" x2="73" y2="11"/>
+        <!-- seat post -->
+        <line x1="46" y1="20" x2="44" y2="13"/>
+        <!-- saddle -->
+        <line x1="39" y1="13" x2="51" y2="13"/>
+        <!-- pedal crank circle -->
+        <circle cx="50" cy="42" r="5"/>
+      </svg>
+    </div>
+    <h1>Bike Sharing Demand Predictor</h1>
+    <p class="subtitle">Enter conditions below to estimate hourly bike rental demand.</p>
+
+    <form method="post" action="/">
+      <div class="grid">
+
+        <div class="field full">
+          <label for="datetime">Date &amp; Time</label>
+          <input type="datetime-local" id="datetime" name="datetime" required value="{{ form.datetime }}" />
+        </div>
+
+        <div class="field">
+          <label for="season">Season</label>
+          <select id="season" name="season">
+            <option value="1" {% if form.season == "1" %}selected{% endif %}>1 — Spring</option>
+            <option value="2" {% if form.season == "2" %}selected{% endif %}>2 — Summer</option>
+            <option value="3" {% if form.season == "3" %}selected{% endif %}>3 — Fall</option>
+            <option value="4" {% if form.season == "4" %}selected{% endif %}>4 — Winter</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="weather">Weather</label>
+          <select id="weather" name="weather">
+            <option value="1" {% if form.weather == "1" %}selected{% endif %}>1 — Clear</option>
+            <option value="2" {% if form.weather == "2" %}selected{% endif %}>2 — Mist / Cloudy</option>
+            <option value="3" {% if form.weather == "3" %}selected{% endif %}>3 — Light Rain / Snow</option>
+            <option value="4" {% if form.weather == "4" %}selected{% endif %}>4 — Heavy Rain / Snow</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="holiday">Holiday</label>
+          <select id="holiday" name="holiday">
+            <option value="0" {% if form.holiday == "0" %}selected{% endif %}>No</option>
+            <option value="1" {% if form.holiday == "1" %}selected{% endif %}>Yes</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="temp">Temperature (°C)</label>
+          <input type="number" id="temp" name="temp" step="0.01" min="0" max="41"
+                 placeholder="e.g. 18.5" required value="{{ form.temp }}" />
+          <span class="hint">Normalised °C — dataset range 0 to 41</span>
+        </div>
+
+        <div class="field">
+          <label for="humidity">Humidity (%)</label>
+          <input type="number" id="humidity" name="humidity" step="0.1" min="0" max="100"
+                 placeholder="e.g. 65" required value="{{ form.humidity }}" />
+        </div>
+
+        <div class="field">
+          <label for="windspeed">Wind Speed</label>
+          <input type="number" id="windspeed" name="windspeed" step="0.01" min="0" max="67"
+                 placeholder="e.g. 12.5" required value="{{ form.windspeed }}" />
+        </div>
+
+      </div>
+      <button type="submit">Predict Demand</button>
+    </form>
+
+    {% if prediction is not none %}
+    <div class="result success">
+      <div class="result-label">Predicted hourly demand</div>
+      <div class="result-value">{{ prediction }}</div>
+      <div class="result-unit">bikes</div>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="result error">{{ error }}</div>
+    {% endif %}
+  </div>
+</body>
+</html>

@@ -1,0 +1,106 @@
+name: Continuous Monitoring
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"   # daily at 06:00 UTC — proactive drift check
+  workflow_run:
+    workflows: ["Continuous Training", "Train Model"]
+    types: [completed]
+
+concurrency:
+  group: monitor
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    # Run whether CT succeeded or failed — we still want the drift report
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ── Reference data ───────────────────────────────────────────────────────
+      # Download processed-data artifact from the most recent successful
+      # Ingest and Preprocess run. This is the historical Kaggle baseline.
+      - name: Download reference processed data
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: ingest_preprocess.yml
+          workflow_conclusion: success
+          name: processed-data
+          path: data/reference
+
+      # ── Current data (new bronze batch) ──────────────────────────────────────
+      # data/bronze/train.csv is DVC-tracked; pull it before preprocessing.
+      - name: Pull bronze data with DVC
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          printf '%s' "$GCP_SA_KEY" > /tmp/gcp-creds.json
+          dvc remote modify --local gcs-remote credentialpath /tmp/gcp-creds.json
+          dvc pull data/bronze/train.csv.dvc
+          rm -f /tmp/gcp-creds.json
+
+      - name: Preprocess new bronze batch
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m src.data.preprocess \
+            --input  data/bronze/train.csv \
+            --output /tmp/current_processed.csv
+
+      # ── Run drift report ─────────────────────────────────────────────────────
+      # Thresholds:
+      #   --psi-threshold    0.20  → PSI > 0.20 = numerical feature drifted
+      #   --ks-threshold     0.05  → KS / Chi2 p < 0.05 = feature drifted
+      #   --min-drift-ratio  0.30  → CT fires only when ≥30% of features drift
+      # Tune these values here without touching Python code.
+      - name: Run drift detection
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python monitoring/run_drift.py \
+            --reference      data/reference/data/processed/train_processed.csv \
+            --current        /tmp/current_processed.csv \
+            --output         artifacts/drift_report.json \
+            --psi-threshold  0.20 \
+            --ks-threshold   0.05 \
+            --min-drift-ratio 0.30 \
+            --fail-on-drift
+
+      # ── Upload report ────────────────────────────────────────────────────────
+      - name: Upload drift report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-report
+          path: artifacts/drift_report.json
+
+      # ── Close the loop: auto-trigger CT when drift is detected ───────────────
+      # --fail-on-drift exits 1, so failure() is true only when drift was found.
+      - name: Trigger Continuous Training on drift
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              workflow_id: 'ct.yml',
+              ref:   'develop'
+            })

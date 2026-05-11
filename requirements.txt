@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+pandas
+numpy
+scikit-learn
+xgboost
+mlflow
+kaggle
+joblib
+gunicorn
+jinja2
+python-multipart
+shap
+matplotlib
+codecarbon
+dvc[gs]
