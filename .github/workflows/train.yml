@@ -3,7 +3,7 @@ name: Train Model
 on:
   workflow_dispatch:
   push:
-    branches: [develop]
+    branches: [develop, main]
   schedule:
     - cron: "0 2 * * 1"
 
