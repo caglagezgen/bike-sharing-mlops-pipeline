@@ -1,6 +1,7 @@
 name: Deploy
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GAR_REGION: ${{ secrets.GAR_REGION }}
   GAR_REPOSITORY: ${{ secrets.GAR_REPOSITORY }}
