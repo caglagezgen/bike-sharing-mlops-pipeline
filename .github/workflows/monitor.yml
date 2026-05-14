@@ -35,13 +35,14 @@ jobs:
 
       # ── Reference data ───────────────────────────────────────────────────────
       # Download processed-data artifact from the most recent successful
-      # Ingest and Preprocess run. This is the historical Kaggle baseline.
+      # Train Model run on main. This is the historical Kaggle baseline.
       - name: Download reference processed data
         uses: dawidd6/action-download-artifact@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: ingest_preprocess.yml
+          workflow: train.yml
           workflow_conclusion: success
+          branch: main
           name: processed-data
           path: data/reference
 

@@ -147,7 +147,7 @@ Bike rental counts are right-skewed with heavy tails at peak commute hours. Appl
 - Directly optimises RMSLE: training on `log(count)` with MSE loss is mathematically equivalent to minimising RMSLE on the original scale, since RMSLE measures error in log space
 - Reduces the leverage of extreme peak-hour values that would otherwise dominate gradient updates
 
-## Branching Strategy (GitFlow)
+## Branching Strategy (GitFlow-lite)
 
 | Branch | Purpose |
 |---|---|
@@ -158,6 +158,18 @@ Bike rental counts are right-skewed with heavy tails at peak commute hours. Appl
 | `hotfix/*` | Emergency production fixes |
 
 Pull requests target `develop`. Releases are merged into `main` via a release branch.
+
+**Workflow alignment**
+- CI runs on PRs to `main` and `develop`, and on pushes to `develop`.
+- Training runs on pushes to `develop` and `main` (plus scheduled runs).
+- Deployment auto-triggers only from successful training on `main`.
+
+**How to work**
+1. Create `feature/*` from `develop`.
+2. Open a PR into `develop` (CI + training validate the change).
+3. Cut `release/*` from `develop` when ready, then merge to `main`.
+4. A `main` merge triggers training; a successful run triggers deploy.
+5. For urgent fixes, branch `hotfix/*` from `main`, merge back into `main` and `develop`.
 
 ## Local Setup
 
