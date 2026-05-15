@@ -1,4 +1,4 @@
 [core]
     remote = gcs-remote
 ['remote "gcs-remote"']
-    url = gs://YOUR_GCS_BUCKET/dvc-cache
+    url = gs://bike-sharing-mlops-dvc/dvc-cache
