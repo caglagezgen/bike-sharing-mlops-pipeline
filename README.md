@@ -171,6 +171,16 @@ Pull requests target `develop`. Releases are merged into `main` via a release br
 4. A `main` merge triggers training; a successful run triggers deploy.
 5. For urgent fixes, branch `hotfix/*` from `main`, merge back into `main` and `develop`.
 
+**Branch protections (GitHub settings)**
+- Protect `main` and `develop` (no direct pushes).
+- Require PR reviews (1 minimum) and status check `CI` before merge.
+- Restrict who can push to `main` (or allow only admins).
+- Optional: require linear history and signed commits.
+
+**Release tagging**
+- Tag `main` merges with `vMAJOR.MINOR.PATCH`.
+- Record the deployed image tag and model version in the release notes for traceability.
+
 ## Local Setup
 
 ```bash

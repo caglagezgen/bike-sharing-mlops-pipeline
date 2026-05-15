@@ -20,8 +20,8 @@ This project delivers an end-to-end MLOps pipeline for the Kaggle Bike Sharing D
 - Tracking: MLflow for metrics and model artifacts
 
 ## 3. Branching Strategy
-GitFlow is used:
-- main: production-ready releases
+GitFlow-lite is used:
+- main: production-ready releases (deployment source)
 - develop: integration branch
 - feature/*: new features and experiments
 - release/*: release stabilization

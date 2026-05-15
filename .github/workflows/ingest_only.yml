@@ -1,5 +1,11 @@
 name: Ingest Only
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
 
