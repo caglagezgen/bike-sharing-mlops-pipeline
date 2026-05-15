@@ -82,6 +82,9 @@ jobs:
         env:
           IMAGE_REF: ${{ needs.build.outputs.image_ref }}
         run: |
+          if [ -z "$IMAGE_REF" ]; then
+            IMAGE_REF="${{ env.GAR_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          fi
           IMAGE_REF="$IMAGE_REF" envsubst < k8s/deployment.yaml | kubectl apply -f -
           kubectl apply -f k8s/service.yaml
       - name: Verify rollout
