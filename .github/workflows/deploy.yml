@@ -7,6 +7,10 @@ env:
   GAR_REPOSITORY: ${{ secrets.GAR_REPOSITORY }}
   IMAGE_NAME: ${{ github.event.repository.name }}
 
+permissions:
+  actions: read
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
