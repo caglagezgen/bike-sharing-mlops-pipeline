@@ -15,7 +15,9 @@ coverage.xml
 mlruns/
 artifacts/
 data/raw/*.csv
-data/processed/
+!data/raw/*.csv.dvc
+data/processed/*.csv
+!data/processed/*.csv.dvc
 *.zip
 kaggle.json
 kaggle/
