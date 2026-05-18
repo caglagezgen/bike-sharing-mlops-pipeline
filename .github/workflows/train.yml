@@ -58,8 +58,9 @@ jobs:
         env:
           MLFLOW_TRACKING_URI: file:${{ github.workspace }}/mlruns
           PYTHONPATH: ${{ github.workspace }}
+          MODEL_STAGE: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
         run: |
-          python -m src.models.train
+          python -m src.models.train --stage "$MODEL_STAGE"
       - name: Quality gate (champion vs challenger)
         run: |
           python - <<'EOF'
@@ -80,6 +81,8 @@ jobs:
             artifacts/model
             artifacts/metrics.json
             artifacts/model_meta.json
+            artifacts/model_versions.json
+            artifacts/model_registry.json
             artifacts/dataset_meta.json
             artifacts/data_profile.json
             artifacts/shap_importance.json

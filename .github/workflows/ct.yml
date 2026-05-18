@@ -18,6 +18,8 @@ jobs:
   train:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,14 +30,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Pull bronze data with DVC
+      - name: Configure DVC credentials
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
           printf '%s' "$GCP_SA_KEY" > /tmp/gcp-creds.json
           dvc remote modify --local gcs-remote credentialpath /tmp/gcp-creds.json
-          dvc pull data/bronze/train.csv.dvc
-          rm -f /tmp/gcp-creds.json
+      - name: Pull bronze data with DVC
+        run: dvc pull data/bronze/train.csv.dvc
       - name: Validate bronze data quality
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -44,6 +46,18 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: python -m src.data.preprocess --input data/bronze/train.csv --output data/processed/train_processed.csv
+      - name: Version processed data with DVC
+        run: |
+          dvc add data/processed/train_processed.csv
+          dvc push
+          rm -f /tmp/gcp-creds.json
+      - name: Commit DVC pointer files
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/processed/train_processed.csv.dvc .gitignore
+          git diff --cached --quiet || git commit -m "chore: update DVC pointer for processed data [skip ci]"
+          git push
       - name: Download previous model artifacts
         continue-on-error: true   # first-ever run has no prior artifact
         uses: dawidd6/action-download-artifact@v3
@@ -61,7 +75,8 @@ jobs:
         env:
           MLFLOW_TRACKING_URI: file:${{ github.workspace }}/mlruns
           PYTHONPATH: ${{ github.workspace }}
-        run: python -m src.models.train --data data/processed/train_processed.csv
+          MODEL_STAGE: staging
+        run: python -m src.models.train --data data/processed/train_processed.csv --stage "$MODEL_STAGE"
       - name: Quality gate (champion vs challenger)
         run: |
           python - <<'EOF'
@@ -82,6 +97,8 @@ jobs:
             artifacts/model
             artifacts/metrics.json
             artifacts/model_meta.json
+            artifacts/model_versions.json
+            artifacts/model_registry.json
             artifacts/dataset_meta.json
             artifacts/data_profile.json
             artifacts/shap_importance.json

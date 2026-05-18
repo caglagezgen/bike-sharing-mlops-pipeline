@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from uuid import uuid4
 
 import joblib
 import numpy as np
@@ -12,8 +13,11 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
+from monitoring.inference_log import log_actual, log_prediction
 from src.config import ARTIFACTS_DIR, MODEL_DIR
 from src.features import build_feature_frame, get_feature_columns
+from src.models.registry import ModelRegistry
+from src.models.version import ModelVersionManager
 
 # Raw input fields that must be present in every prediction request.
 # These are the original Kaggle columns before any feature engineering.
@@ -45,6 +49,18 @@ class PredictionRequest(BaseModel):
 PredictionBody = PredictionRequest | PredictionRecord | list[PredictionRecord]
 
 
+class FeedbackRecord(BaseModel):
+    prediction_id: str = Field(..., description="Prediction identifier")
+    actual: float = Field(..., description="Observed ground-truth value")
+
+
+class FeedbackRequest(BaseModel):
+    records: list[FeedbackRecord] | None = None
+
+
+FeedbackBody = FeedbackRequest | FeedbackRecord | list[FeedbackRecord]
+
+
 def load_feature_config() -> list[str]:
     # Read the feature list written by preprocess.py so the API always uses
     # exactly the same columns the model was trained on.
@@ -59,6 +75,28 @@ def load_model(model_path: Path):
     return joblib.load(model_path)
 
 
+def resolve_model_info() -> dict:
+    # Prefer explicit registry stages; fall back to version history.
+    version = "unknown"
+    stage = "unknown"
+    try:
+        registry = ModelRegistry()
+        prod = registry.current("production")
+        if prod:
+            return {"version": prod, "stage": "production"}
+        staging = registry.current("staging")
+        if staging:
+            return {"version": staging, "stage": "staging"}
+    except Exception:
+        pass
+
+    try:
+        version = ModelVersionManager().current
+    except Exception:
+        pass
+    return {"version": version, "stage": stage}
+
+
 def record_to_dict(record: PredictionRecord) -> dict:
     if hasattr(record, "model_dump"):
         return record.model_dump()
@@ -69,6 +107,18 @@ def normalize_records(payload: PredictionBody) -> list[PredictionRecord]:
     # Accept three payload shapes: {"records": [...]}, [...], or a single object.
     # All are normalised to a flat list so the prediction logic is uniform.
     if isinstance(payload, PredictionRequest):
+        if not payload.records:
+            raise HTTPException(status_code=400, detail="records cannot be empty")
+        return payload.records
+    if isinstance(payload, list):
+        if not payload:
+            raise HTTPException(status_code=400, detail="records cannot be empty")
+        return payload
+    return [payload]
+
+
+def normalize_feedback(payload: FeedbackBody) -> list[FeedbackRecord]:
+    if isinstance(payload, FeedbackRequest):
         if not payload.records:
             raise HTTPException(status_code=400, detail="records cannot be empty")
         return payload.records
@@ -199,7 +249,51 @@ def create_app() -> FastAPI:
         preds = np.expm1(preds_log)
         preds = np.maximum(preds, 0)
 
-        return {"predictions": preds.tolist()}
+        request_id = str(uuid4())
+        model_info = resolve_model_info()
+        prediction_ids: list[str] = []
+        preds_list = preds.tolist()
+        for record, pred in zip(records, preds_list):
+            prediction_id = str(uuid4())
+            prediction_ids.append(prediction_id)
+            try:
+                log_prediction(
+                    record=record_to_dict(record),
+                    prediction=float(pred),
+                    prediction_id=prediction_id,
+                    request_id=request_id,
+                    model_version=model_info["version"],
+                    model_stage=model_info["stage"],
+                    source="api",
+                )
+            except Exception:
+                pass
+
+        return {
+            "predictions": preds_list,
+            "prediction_ids": prediction_ids,
+            "request_id": request_id,
+            "model_version": model_info["version"],
+            "model_stage": model_info["stage"],
+        }
+
+    @app.post("/feedback")
+    def feedback(payload: FeedbackBody = Body(...)) -> dict:
+        records = normalize_feedback(payload)
+        request_id = str(uuid4())
+        recorded = 0
+        for record in records:
+            try:
+                log_actual(
+                    prediction_id=record.prediction_id,
+                    actual=float(record.actual),
+                    request_id=request_id,
+                    source="feedback",
+                )
+                recorded += 1
+            except Exception:
+                continue
+        return {"status": "ok", "recorded": recorded, "request_id": request_id}
 
     return app
 

@@ -1,5 +1,5 @@
 # Bike Sharing Demand MLOps Pipeline
-End-to-end MLOps pipeline for the Kaggle Bike Sharing Demand dataset. Implements data ingestion, preprocessing, model training/testing, semantic model versioning, drift monitoring, CI, CD, and continuous training. The model is served via a FastAPI service deployed as a Docker container to a Kind Kubernetes cluster on a GCP VM.
+End-to-end MLOps pipeline for the Kaggle Bike Sharing Demand dataset. Implements data ingestion, preprocessing, model training/testing, semantic model versioning + registry, drift and performance monitoring, CI, CD, and continuous training. The model is served via a FastAPI service deployed as a Docker container to a Kind Kubernetes cluster on a GCP VM.
 
 ## Machine Learning Problem Overview
 
@@ -27,11 +27,21 @@ FastAPI was selected because it provides strong request validation through Pydan
 | Preprocessing | `src/data/preprocess.py` — feature engineering, SHA256 versioning |
 | Model Training | `src/models/train.py` — XGBoost, MLflow tracking |
 | Model Versioning | `src/models/version.py` — semantic versioning (major.minor.patch) |
+| Model Registry | `src/models/registry.py` — stage promotion (staging/production) |
 | Drift Monitoring | `monitoring/drift.py` — KS test, Chi2, PSI |
-| Serving | `app/app.py` — FastAPI, `/health` + `/predict` |
+| Performance Monitoring | `monitoring/run_performance.py` — post-deploy metrics from inference logs |
+| Serving | `app/app.py` — FastAPI, `/health` + `/ready` + `/predict` |
 | CI | `.github/workflows/ci.yml` — pytest on PRs |
 | CD | `.github/workflows/deploy.yml` — Docker → Artifact Registry → K8s |
 | Continuous Training | `.github/workflows/ct.yml` — retrain on new data |
+
+## Architecture Diagrams
+
+### End-to-End MLOps Workflow
+![End-to-End MLOps Workflow](docs/diagrams/mlops-workflow.svg)
+
+### Deployment Architecture
+![Deployment Architecture](docs/diagrams/deployment-architecture.svg)
 
 ## Evaluation Metrics
 
@@ -51,7 +61,6 @@ Additional business-interpretable metrics logged per run:
 | MAPE | $\frac{100}{n}\sum\frac{|y_i - \hat{y}_i|}{y_i}$ | Percentage error; comparable across low/high demand hours. Zero-guarded: hours with `count=0` are excluded from the mean to avoid division-by-zero |
 | R² | $1 - \frac{\sum(y_i-\hat{y}_i)^2}{\sum(y_i-\bar{y})^2}$ | Proportion of demand variance explained relative to a naive mean predictor. Target benchmark: **R² ≥ 0.95** |
 
-See [Bike Sharing Demand Prediction](https://medium.com/@muhammadaris10/bike-sharing-demand-prediction-fc692d90b5b3) for full analysis.
 
 ## Repository Structure
 
@@ -70,7 +79,10 @@ See [Bike Sharing Demand Prediction](https://medium.com/@muhammadaris10/bike-sha
 │   ├── deployment.yaml      Kubernetes Deployment
 │   └── service.yaml         NodePort Service (port 30080)
 ├── monitoring/
-│   └── drift.py             KS, Chi2, PSI drift detection
+│   ├── drift.py             KS, Chi2, PSI drift detection
+│   ├── inference_log.py     JSONL inference logging helpers
+│   ├── performance.py       Performance metric computation
+│   └── run_performance.py   Performance report CLI
 ├── notebooks/               EDA, training, optimisation, drift analysis
 ├── scripts/
 │   ├── ingest.sh
@@ -85,7 +97,8 @@ See [Bike Sharing Demand Prediction](https://medium.com/@muhammadaris10/bike-sha
 │   │   └── engineering.py   Feature definitions and transformations
 │   └── models/
 │       ├── train.py         XGBoost training + MLflow logging
-│       └── version.py       Semantic model version manager
+│       ├── version.py       Semantic model version manager
+│       └── registry.py      Stage-based model registry
 └── tests/                   Unit tests
 ```
 
@@ -216,7 +229,7 @@ bash scripts/preprocess.sh
 ### 3. Train and Track
 
 ```bash
-python -m src.models.train
+python -m src.models.train --stage staging
 mlflow ui --backend-store-uri ./mlruns
 ```
 
@@ -253,10 +266,43 @@ curl -X POST http://localhost:8080/predict \
   }'
 ```
 
+Optional feedback request (for performance monitoring):
+
+```bash
+curl -X POST http://localhost:8080/feedback \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prediction_id": "YOUR_PREDICTION_ID",
+    "actual": 123
+  }'
+```
+
 ### 6. Run Tests
 
 ```bash
 pytest tests/ -v
+```
+
+With coverage (matches CI gate):
+
+```bash
+pytest --cov=src --cov=monitoring --cov=app \
+  --cov-fail-under=55 \
+  --cov-report=term-missing
+```
+
+Run a single test file (examples):
+
+```bash
+pytest tests/test_api.py -v
+pytest tests/test_registry.py -v
+pytest tests/test_performance.py -v
+```
+
+Lint (matches CI):
+
+```bash
+ruff check .
 ```
 
 ## Docker
@@ -291,6 +337,201 @@ kubectl rollout status deployment/bike-sharing-api
 ```
 
 Service is exposed on NodePort `30080`.
+
+## Commands and Runbook
+
+### Common Commands (Local)
+
+Environment setup:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+```
+
+Kaggle auth check:
+
+```bash
+kaggle --version
+kaggle competitions list
+```
+
+Ingest and preprocess:
+
+```bash
+python -m src.data.ingest --competition bike-sharing-demand
+python -m src.data.preprocess
+```
+
+Train model:
+
+```bash
+python -m src.models.train --stage staging
+```
+
+Model versioning:
+
+```bash
+python -m src.models.version current
+python -m src.models.version history
+python -m src.models.version diff 0.0.5 0.0.6
+```
+
+Run tests:
+
+```bash
+pytest tests/ -v
+```
+
+Run tests with coverage:
+
+```bash
+pytest --cov=src --cov=monitoring --cov=app \
+  --cov-fail-under=55 \
+  --cov-report=term-missing
+```
+
+Lint:
+
+```bash
+ruff check .
+```
+
+Run API locally:
+
+```bash
+uvicorn app.app:app --host 0.0.0.0 --port 8080
+```
+
+Inference logging controls:
+
+```bash
+export INFERENCE_LOG_PATH=artifacts/inference_logs.jsonl
+export INFERENCE_LOG_ENABLED=true
+```
+
+Generate performance report from inference logs:
+
+```bash
+python monitoring/run_performance.py \
+  --log-path artifacts/inference_logs.jsonl \
+  --output artifacts/performance_report.json
+```
+
+### DVC (Local)
+
+Set GCS remote (update bucket name):
+
+```bash
+dvc remote modify gcs-remote url gs://YOUR_GCS_BUCKET/dvc-cache
+```
+
+Seed bronze data (for CT/CM):
+
+```bash
+mkdir -p data/bronze
+cp data/raw/train.csv data/bronze/train.csv
+dvc add data/bronze/train.csv
+dvc push
+git add data/bronze/train.csv.dvc .gitignore
+git commit -m "chore: seed bronze dataset"
+git push origin develop
+```
+
+Track processed data (versioned features):
+
+```bash
+python -m src.data.preprocess
+dvc add data/processed/train_processed.csv
+dvc push
+git add data/processed/train_processed.csv.dvc .gitignore
+git commit -m "chore: version processed dataset"
+git push origin develop
+```
+
+### GitHub Actions Runbook
+
+Recommended flow (GitFlow-lite):
+
+1. Run **Ingest and Preprocess** on `develop`.
+2. Run **Train Model** on `develop`.
+3. Merge `develop` -> `main`.
+4. Train on `main` triggers **Deploy**.
+5. Re-run **Continuous Training** and **Continuous Monitoring** if they failed due to missing bronze data.
+
+### VM Runbook (Kind + Runner)
+
+Create Kind cluster with NodePort mapping (recommended for browser access):
+
+```bash
+cat <<'EOF' > kind-config.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  extraPortMappings:
+  - containerPort: 30080
+    hostPort: 30080
+    protocol: TCP
+EOF
+
+kind delete cluster
+kind create cluster --config kind-config.yaml
+```
+
+Create Artifact Registry pull secret (run on the VM):
+
+```bash
+kubectl create secret docker-registry artifact-registry \
+  --docker-server=REGION-docker.pkg.dev \
+  --docker-username=_json_key \
+  --docker-password="$(cat /path/to/gcp-sa-key.json)" \
+  --docker-email=you@example.com
+```
+
+Deploy manually on the VM (use a valid image tag):
+
+```bash
+IMAGE_REF=REGION-docker.pkg.dev/PROJECT_ID/REPO/bike-sharing-mlops-pipeline:latest
+IMAGE_REF="$IMAGE_REF" envsubst < k8s/deployment.yaml | kubectl apply -f -
+kubectl apply -f k8s/service.yaml
+kubectl rollout status deployment/bike-sharing-api
+```
+
+Smoke test from the VM:
+
+```bash
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+curl -f "http://${NODE_IP}:30080/ready"
+```
+
+Browser access:
+
+```text
+http://<VM_EXTERNAL_IP>:30080/
+```
+
+If the port is blocked, create a firewall rule (Cloud Shell):
+
+```bash
+gcloud compute firewall-rules create allow-nodeport-30080 \
+  --direction=INGRESS \
+  --priority=1000 \
+  --network=default \
+  --action=ALLOW \
+  --rules=tcp:30080 \
+  --source-ranges=0.0.0.0/0
+```
+
+### Troubleshooting
+
+- **401 from Kaggle API**: regenerate Kaggle token and update `KAGGLE_USERNAME`/`KAGGLE_KEY` secrets.
+- **DVC 403 on GCS**: grant Storage Object Admin to the service account on the bucket.
+- **ImagePullBackOff**: recreate `artifact-registry` pull secret using the correct service account key.
+- **Deploy waiting**: ensure self-hosted runner is online with labels `self-hosted`, `kind`, `gcp`.
+- **NodePort not reachable**: recreate Kind with `extraPortMappings` or use `kubectl port-forward`.
 
 ## GitHub Actions Workflows
 

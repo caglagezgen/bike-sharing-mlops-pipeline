@@ -95,6 +95,22 @@ jobs:
           name: drift-report
           path: artifacts/drift_report.json
 
+      - name: Build performance report (if logs present)
+        if: ${{ hashFiles('artifacts/inference_logs.jsonl') != '' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python monitoring/run_performance.py \
+            --log-path artifacts/inference_logs.jsonl \
+            --output artifacts/performance_report.json
+
+      - name: Upload performance report
+        if: ${{ hashFiles('artifacts/performance_report.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-report
+          path: artifacts/performance_report.json
+
       # ── Close the loop: auto-trigger CT when drift is detected ───────────────
       # --fail-on-drift exits 1, so failure() is true only when drift was found.
       - name: Trigger Continuous Training on drift

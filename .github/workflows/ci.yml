@@ -35,5 +35,5 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           pytest --cov=src --cov=monitoring --cov=app \
-                 --cov-fail-under=45 \
+               --cov-fail-under=55 \
                  --cov-report=term-missing
