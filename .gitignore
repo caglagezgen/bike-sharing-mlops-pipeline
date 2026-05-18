@@ -24,3 +24,6 @@ kaggle/
 
 !data/raw/*.csv.dvc
 !data/processed/*.csv.dvc
+
+!data/raw/*.csv.dvc
+!data/processed/*.csv.dvc
