@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY src /app/src
 COPY app /app/app
+COPY monitoring /app/monitoring
 COPY artifacts /app/artifacts
 
 EXPOSE 8080
