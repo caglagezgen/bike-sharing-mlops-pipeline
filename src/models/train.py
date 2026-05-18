@@ -19,6 +19,7 @@ from codecarbon import EmissionsTracker
 
 from src.config import ARTIFACTS_DIR, MODEL_DIR, PROCESSED_DIR, ensure_dirs
 from src.features.engineering import get_feature_columns
+from src.models.registry import ModelRegistry
 from src.models.version import ModelVersionManager
 
 DATASET_META_PATH = ARTIFACTS_DIR / "dataset_meta.json"
@@ -289,6 +290,11 @@ def main() -> None:
     )
     parser.add_argument("--val-ratio", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--stage",
+        default=os.getenv("MODEL_STAGE", "staging"),
+        help="Registry stage for the trained model (staging|production)",
+    )
     args = parser.parse_args()
 
     ensure_dirs()
@@ -319,6 +325,29 @@ def main() -> None:
         },
         feature_columns=result["feature_columns"],
         dataset_meta=dataset_meta,
+    )
+    registry = ModelRegistry()
+    registry.register(
+        version=version,
+        model_path=str(artifacts["model_path"]),
+        metrics={
+            "val_rmsle": result["val_rmsle"],
+            "val_mae": result["val_mae"],
+            "val_mape": result["val_mape"],
+            "val_r2": result["val_r2"],
+            "val_rows": result["val_rows"],
+        },
+        params={
+            "model": "xgboost",
+            "n_estimators": 1300,
+            "max_depth": 5,
+            "learning_rate": 0.05,
+            "subsample": 0.9,
+            "colsample_bytree": 0.9,
+        },
+        feature_columns=result["feature_columns"],
+        dataset_meta=dataset_meta,
+        stage=args.stage,
     )
     print(f"Model version: {version}")
 
