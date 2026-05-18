@@ -89,10 +89,11 @@ jobs:
           kubectl apply -f k8s/service.yaml
       - name: Verify rollout
         run: |
-          if ! kubectl rollout status deployment/bike-sharing-api --timeout=120s; then
+          # Allow longer rollout timeout for image pull and model startup.
+          if ! kubectl rollout status deployment/bike-sharing-api --timeout=300s; then
             echo "Rollout failed — initiating rollback"
             kubectl rollout undo deployment/bike-sharing-api
-            kubectl rollout status deployment/bike-sharing-api --timeout=60s
+            kubectl rollout status deployment/bike-sharing-api --timeout=120s
             exit 1
           fi
       - name: Smoke test
