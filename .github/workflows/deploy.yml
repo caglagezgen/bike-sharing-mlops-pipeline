@@ -75,7 +75,7 @@ jobs:
   deploy:
     needs: build
     runs-on: [self-hosted, kind, gcp]
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Deploy to cluster
@@ -89,10 +89,18 @@ jobs:
           kubectl apply -f k8s/service.yaml
       - name: Verify rollout
         run: |
-          if ! kubectl rollout status deployment/bike-sharing-api --timeout=120s; then
-            echo "Rollout failed — initiating rollback"
+          # Allow up to 10 minutes for image pull and model startup
+          if ! kubectl rollout status deployment/bike-sharing-api --timeout=600s; then
+            echo "=== Rollout failed. Collecting diagnostics ==="
+            echo "=== Pod Status ==="
+            kubectl get pods -o wide
+            echo "=== Deployment Events ==="
+            kubectl describe deployment bike-sharing-api
+            echo "=== Pod Logs ==="
+            kubectl logs -l app=bike-sharing-api --tail=100 -c api
+            echo "=== Initiating rollback ==="
             kubectl rollout undo deployment/bike-sharing-api
-            kubectl rollout status deployment/bike-sharing-api --timeout=60s
+            kubectl rollout status deployment/bike-sharing-api --timeout=120s
             exit 1
           fi
       - name: Smoke test
