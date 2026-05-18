@@ -21,3 +21,6 @@ data/processed/*.csv
 *.zip
 kaggle.json
 kaggle/
+
+!data/raw/*.csv.dvc
+!data/processed/*.csv.dvc
