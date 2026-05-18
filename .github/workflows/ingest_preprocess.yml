@@ -61,6 +61,14 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: python -m src.data.preprocess
+      - name: Ensure DVC pointer files are not git-ignored
+        run: |
+          # Some PRs may still have an older .gitignore that blocks DVC pointer files.
+          # Append allow-list entries if they are not present so CI can create .dvc pointers.
+          if [ -f .gitignore ]; then
+            grep -q "!data/raw/*.csv.dvc" .gitignore || printf "\n!data/raw/*.csv.dvc\n" >> .gitignore
+            grep -q "!data/processed/*.csv.dvc" .gitignore || printf "!data/processed/*.csv.dvc\n" >> .gitignore
+          fi
       - name: Track raw + processed data with DVC
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
