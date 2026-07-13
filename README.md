@@ -618,6 +618,23 @@ Each run writes to `artifacts/`:
 | `model_meta.json` | Training timestamp and feature columns |
 | `model_versions.json` | Full semantic version history |
 
+## Why This Runtime and Deployment Strategy
+
+**Runtime choice: Kind on a GCP VM + self-hosted GitHub Actions runner**
+
+- **Container-native app:** The service is packaged via Docker and deployed with Kubernetes manifests, so a lightweight Kind cluster is a natural fit.
+- **Small footprint:** The API and model are lightweight, so a single VM can run them reliably; using GKE(Google Kubernetes Engine) would add cost and complexity without real benefit for this demo.
+- **Kubernetes health gating:** `/health` and `/ready` align with K8s probes, preventing traffic until the model is loaded.
+- **Tight CI/CD integration:** A self-hosted runner on the VM can run `kubectl` directly without exposing the cluster to external runners.
+- **Traceability:** Immutable image tags and registry metadata keep deployments auditable and reproducible.
+
+**Why these deployment strategies**
+
+- **Rolling updates + probes:** Safe rollouts; failed pods don’t receive traffic and rollbacks are automatic.
+- **Artifact Registry:** Private, versioned Docker images with clean integration into GitHub Actions and K8s pull secrets.
+- **NodePort exposure:** Simple and predictable for demo access without requiring a managed load balancer.
+- **Self-hosted runner:** Keeps build/deploy within the same security boundary as the cluster.
+
 ## References
 
 - Will Cukierski. Bike Sharing Demand. https://kaggle.com/competitions/bike-sharing-demand, 2014.
